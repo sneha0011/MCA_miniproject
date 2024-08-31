@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Due Tracker | Hostel Staff Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: auto;
+            overflow: hidden;
+        }
+
+        /* Header Styles */
+        header {
+            background-color: #2c3e50; /* Dark blue background */
+            padding: 15px 20px;
+            color: #ecf0f1; /* Light grey text color */
+            border-bottom: 4px solid #1a252f; /* Darker blue border */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .page-title {
+            font-size: 24px; /* Larger font size */
+            font-weight: 700; /* Bold font weight */
+            text-transform: uppercase; /* Uppercase text */
+            letter-spacing: 2px; /* Increased letter spacing for clarity */
+            margin: 0;
+        }
+        .subtitle {
+            font-size: 20px; /* Moderate font size */
+            font-weight: 400; /* Regular font weight */
+            margin: 5px 0 0; /* Small margin between title and subtitle */
+            text-align: center; /* Center-align the text */
+            flex-grow: 1;
+            color: #bdc3c7; /* Soft grey color */
+        }
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 10px;
+            background: #34495e;
+        }
+
+        nav a {
+            color: #fff;
+            text-decoration: none;
+            padding: 10px;
+        }
+
+        nav a:hover {
+            background: #2c3e50;
+        }
+
+        .main-content {
+            padding: 20px;
+            background: #fff;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background: #ecf0f1;
+        }
+
+        form {
+            margin-top: 20px;
+        }
+
+        form input, form select {
+            padding: 10px;
+            margin: 10px 0;
+            width: calc(100% - 22px); /* Adjust width considering padding and borders */
+            box-sizing: border-box;
+        }
+
+        form button {
+            padding: 10px;
+            background: #2c3e50;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        form button:hover {
+            background: #34495e;
+        }
+
+        @media (max-width: 768px) {
+            nav {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            nav a {
+                display: block;
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h2 class="page-title">Due Tracker</h2>
+        <h1 class="subtitle">Hostel Dashboard</h1>
+    </header>
+    
+    <nav>
+        <a href="#manage-hostel-fees">Manage Hostel Fees</a>
+        <a href="#view-dues">View Dues</a>
+        <a href="#logout">Logout</a>
+    </nav>
+    
+    <div class="container">
+        <!-- Manage Hostel Fees Section -->
+        <div id="manage-hostel-fees" class="main-content">
+            <h2>Manage Hostel Fees</h2>
+            <form>
+                <label for="student-id">Student ID:</label>
+                <input type="text" id="student-id" name="student-id" placeholder="Enter student ID">
+                
+                <label for="hostel-name">Hostel Name:</label>
+                <input type="text" id="hostel-name" name="hostel-name" placeholder="Enter hostel name">
+                
+                <label for="hostel-due">Hostel Due:</label>
+                <input type="number" id="hostel-due" name="hostel-due" placeholder="Enter due amount">
+                
+                <label for="fee-date">Fee Date:</label>
+                <input type="date" id="fee-date" name="fee-date">
+
+                
+                <button type="submit">Add Hostel Fee</button>
+            </form>
+            
+            <h3>Existing Hostel Fees</h3>
+            <label for="hostel-search">Search Hostel Fees:</label>
+            <input type="text" id="hostel-search" placeholder="Search by Student ID or Hostel Name" oninput="filterHostelFees()">
+
+            <table id="hostel-table">
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Hostel Name</th>
+                        <th>Due Amount</th>
+                        <th>Fee Date</th>
+                        <th>Installment Period</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Example data; replace with dynamic data -->
+                    <tr>
+                        <td>123</td>
+                        <td>Hostel A</td>
+                        <td>$100</td>
+                        <td>2024-08-01</td>
+                        <td>Monthly</td>
+                        <td><button>Edit</button> <button>Delete</button></td>
+                    </tr>
+                    <!-- More rows as needed -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- View Dues Section -->
+        <div id="view-dues" class="main-content">
+            <h2>View Dues</h2>
+            <form>
+                <label for="search">Search by Student ID or Name:</label>
+                <input type="text" id="search" name="search" placeholder="Enter Student ID or Name">
+                
+                <button type="submit">Search</button>
+            </form>
+
+            <h3>Dues and Fees</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Installment Period</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Example data; replace with dynamic data -->
+                    <tr>
+                        <td>123</td>
+                        <td>John Smith</td>
+                        <td>Hostel</td>
+                        <td>$100</td>
+                        <td>2024-08-01</td>
+                        <td>Pending</td>
+                        <td>August 2024</td>
+                    </tr>
+                    <!-- More rows as needed -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function filterHostelFees() {
+            var input, filter, table, tr, td, i, txtValue;
+            input = document.getElementById("hostel-search");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("hostel-table");
+            tr = table.getElementsByTagName("tr");
+            for (i = 0; i < tr.length; i++) {
+                td = tr[i].getElementsByTagName("td")[1]; // Column index 1 is Hostel Name
+                if (td) {
+                    txtValue = td.textContent || td.innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

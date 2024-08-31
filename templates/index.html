@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Due Tracker - Home</title>
+    <style>
+        /* Your existing styles here */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        
+        header {
+            background-color: #2c3e50; /* Dark blue background */
+            padding: 15px 20px;
+            color: #ecf0f1; /* Light grey text color */
+            border-bottom: 4px solid #1a252f; /* Darker blue border */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .login-link-top {
+            padding: 10px 20px;
+            background-color: #2980b9;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .login-link-top:hover {
+            background-color: #1a5e82;
+        }
+
+        .hero {
+            background-color: #2c3e50;
+            color: #fff;
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 36px;
+            margin: 0 0 20px;
+        }
+
+        .hero p {
+            font-size: 18px;
+            margin: 0 0 20px;
+        }
+
+        .features {
+            background-color: #fff;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .feature-item {
+            margin-bottom: 30px;
+        }
+
+        .feature-item h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .feature-item p {
+            font-size: 16px;
+            color: #666;
+        }
+
+        .login-section {
+            background-color: #ecf0f1;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .login-section h2 {
+            margin-bottom: 20px;
+        }
+
+        .login-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #2980b9;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .login-link:hover {
+            background-color: #1a5e82;
+        }
+
+        footer {
+            background-color: #34495e; /* Changed to match header color */
+            color: #ecf0f1;
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 14px;
+            position: relative;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h2 class="page-title">Due Tracker</h2>
+        <a href="{{ url_for('login') }}" class="login-link-top">Login</a> <!-- Link to login page -->
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Welcome to Due Tracker</h1>
+            <p>Your one-stop solution for managing dues and fees efficiently.</p>
+        </div>
+    </section>
+
+    <!-- Other content here -->
+
+    <footer>
+        <p>&copy; 2024 Due Tracker. All Rights Reserved.</p>
+    </footer>
+</body>
+</html>
