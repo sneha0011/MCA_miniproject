@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Due Tracker | Edit Hostel Fee and Due</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            margin: auto;
+            overflow: hidden;
+        }
+        /* Header Styles */
+        header {
+            background-color: #2c3e50;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            border-bottom: 4px solid #1a252f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0;
+        }
+        .subtitle {
+            font-size: 20px;
+            font-weight: 400;
+            margin: 5px 0 0;
+            text-align: center;
+            flex-grow: 1;
+            color: #bdc3c7;
+        }
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 10px;
+            background: #34495e;
+        }
+        nav a {
+            color: #fff;
+            text-decoration: none;
+            padding: 10px;
+        }
+        nav a:hover {
+            background: #2c3e50;
+        }
+        .main-content {
+            padding: 20px;
+            background: #fff;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .section-title {
+            font-size: 22px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 16px;
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #2c3e50;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+            border: none;
+        }
+        .btn:hover {
+            background-color: #34495e;
+        }
+        .btn-secondary {
+            background-color: #bdc3c7;
+            color: #2c3e50;
+            border: none;
+        }
+        .btn-secondary:hover {
+            background-color: #aab7b8;
+        }
+        @media (max-width: 768px) {
+            nav {
+                flex-direction: column;
+                align-items: center;
+            }
+            nav a {
+                display: block;
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h2 class="page-title">Due Tracker</h2>
+        <h1 class="subtitle">Edit Hostel Fee and Due</h1>
+    </header>
+    
+    <nav>
+        <a href="{{ url_for('hostel_home') }}">Hostel Home</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+    
+    <div class="container">
+        <div class="main-content">
+            <h2 class="section-title">Edit Hostel Fee and Due</h2>
+            <form action="{{ url_for('edit_hostel_fee', reg_id=hostel_fees.reg_id) }}" method="POST">
+                <div class="form-group">
+                    <label for="reg_id">Registration ID:</label>
+                    <input type="text" id="reg_id" name="reg_id" value="{{ hostel_fees.reg_id }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="fee_type">Fee Type:</label>
+                    <select id="fee_type" name="fee_type" required>
+                        <option value="">Select Fee Type</option>
+                        <option value="Rent & Maintenance" {% if hostel_fees.fee_type == 'Rent & Maintenance' %}selected{% endif %}>Rent & Maintenance</option>
+                        <option value="Mess Fee" {% if hostel_fees.fee_type == 'Mess Fee' %}selected{% endif %}>Mess Fee</option>
+                        <option value="Due" {% if hostel_fees.fee_type == 'Due' %}selected{% endif %}>Due</option>
+                        <!-- Add other fee types as needed -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="amount">Amount:</label>
+                    <input type="number" id="amount" name="amount" value="{{ hostel_fees.amount }}" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="due_date">Due Date:</label>
+                    <input type="date" id="due_date" name="due_date" value="{{ hostel_fees.due_date }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <input type="text" id="description" name="description" value="{{ hostel_fees.description }}">
+                </div>
+                <div class="form-group">
+                    <label for="status">Status:</label>
+                    <select id="status" name="status" required>
+                        <option value="Unpaid" {% if hostel_fees.status == 'Unpaid' %}selected{% endif %}>Unpaid</option>
+                        <option value="Paid" {% if hostel_fees.status == 'Paid' %}selected{% endif %}>Paid</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Update Fee and Due</button>
+                <a href="{{ url_for('hostel_home') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
