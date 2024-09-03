@@ -117,6 +117,18 @@
         form button:hover {
             background: #1a252f; /* Darker shade on hover */
         }
+        .pay-button {
+            padding: 5px 10px;
+            background-color: #27ae60; /* Green background */
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .pay-button:hover {
+            background-color: #2ecc71; /* Lighter green on hover */
+        }
     </style>
 </head>
 <body>
@@ -184,6 +196,7 @@
                         <th>Description</th>
                         <th>Amount</th>
                         <th>Due Date</th>
+                        <th>Action</th>
 
                         
                     </tr>
@@ -216,6 +229,7 @@ function fetchAndDisplayFees(reg_id) {
                     <td>${fee.description}</td>
                     <td>${fee.amount}</td>
                     <td>${fee.due_date}</td>
+                    <td><button class="pay-button" onclick="payFee(${fee.fee_id})">Pay</button></td> <!-- Pay button -->
                 `;
                 tableBody.appendChild(row);
             });
