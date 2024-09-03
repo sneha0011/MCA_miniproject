@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 import pymysql
-from db import iud, selectone, selectall
+from db import iud, selectone, selectall, selectall2
 from db import get_db_connection
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Replace with your actual secret key
@@ -17,12 +18,23 @@ def home():
         if role == 'admin':
             return redirect(url_for('admin_home'))  # Redirect to Admin homepage
         elif role == 'staff':
-            return redirect(url_for('staff_home'))  # Redirect to Staff homepage
+            staff_type = session.get('staff_type')
+            if staff_type == 'Hostel':
+                return redirect(url_for('hostel_home'))
+            elif staff_type == 'Office':
+                return redirect(url_for('office_home'))
+            elif staff_type == 'Department':
+                return redirect(url_for('department_home'))
+            elif staff_type == 'Library':
+                return redirect(url_for('library_home'))
+            else:
+                return "Invalid staff type."
         elif role == 'student':
             return redirect(url_for('student_home'))  # Redirect to Student homepage
         else:
             return "Unauthorized access"
     return redirect(url_for('login'))
+
 
 @app.route('/add_staff', methods=['GET', 'POST'])
 def add_staff():
@@ -107,12 +119,25 @@ def search_staff():
 @app.route('/search_students', methods=['GET'])
 def search_students():
     search_query = request.args.get('query', '')
+    display_type = request.args.get('type', 'default')  # New parameter to control what details to fetch
+    
     connection = get_db_connection()
     cursor = connection.cursor(pymysql.cursors.DictCursor)
     
-    sql_query = f"""
-    SELECT * FROM students WHERE reg_id LIKE %s OR student_name LIKE %s
-    """  # Replace 'student_id' with 'reg_id' if that's the correct column
+    if display_type == 'due_details':
+        # Fetching student details along with their due details
+        sql_query = """
+        SELECT s.reg_id, s.student_name, h.amount, h.due_date, h.status 
+        FROM students s 
+        JOIN hostel_fees h ON s.reg_id = h.reg_id 
+        WHERE s.reg_id LIKE %s OR s.student_name LIKE %s
+        """
+    else:
+        # Fetching basic student details
+        sql_query = """
+        SELECT * FROM students WHERE reg_id LIKE %s OR student_name LIKE %s
+        """
+    
     cursor.execute(sql_query, (f'%{search_query}%', f'%{search_query}%'))
     results = cursor.fetchall()
     
@@ -120,6 +145,8 @@ def search_students():
     connection.close()
     
     return jsonify(results)
+
+
 @app.route('/edit_staff/<staff_id>', methods=['GET', 'POST'])
 def edit_staff(staff_id):
     if request.method == 'POST':
@@ -182,15 +209,13 @@ def delete_student(reg_id):
     iud("DELETE FROM students WHERE reg_id=%s", (reg_id,))
     return redirect(url_for('admin_home'))
 
-
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
         
-        # Fetch user data from database
+        # Fetch user data from the login table
         qry = "SELECT * FROM login WHERE username=%s"
         user = selectone(qry, (username,))
         
@@ -208,13 +233,24 @@ def login():
                     
                     if student:
                         session['stu_id'] = student['stu_id']  # Set the student ID in session
-
+                
+                elif user['role'] == 'staff':
+                    # Fetch the staff type (role) from the staff table
+                    qry_staff = "SELECT role FROM staff WHERE email=%s"
+                    staff = selectone(qry_staff, (username,))
+                    
+                    if staff:
+                        session['staff_type'] = staff['role']  # Set the staff type in session
+                    else:
+                        return "Staff member not found."
+                
                 return redirect(url_for('home'))
             else:
                 return "Invalid credentials. Please try again."
         else:
             return "User does not exist."
     return render_template('login.html')
+
 
 
 @app.route('/admin_home')
@@ -228,6 +264,35 @@ def admin_home():
 def staff_home():
     if 'username' in session and session.get('role') == 'staff':
         return render_template('staff_home.html')
+    return redirect(url_for('login'))
+
+
+@app.route('/hostel_home')
+def hostel_home():
+    if 'username' in session and session.get('role') == 'staff' and session.get('staff_type') == 'Hostel':
+        # Fetch and display data relevant to hostel staff
+        return render_template('hostel_home.html')
+    return redirect(url_for('login'))
+
+@app.route('/office_home')
+def office_home():
+    if 'username' in session and session.get('role') == 'staff' and session.get('staff_type') == 'Office':
+        # Fetch and display data relevant to office staff
+        return render_template('office_home.html')
+    return redirect(url_for('login'))
+
+@app.route('/department_home')
+def department_home():
+    if 'username' in session and session.get('role') == 'staff' and session.get('staff_type') == 'Department':
+        # Fetch and display data relevant to department staff
+        return render_template('department_home.html')
+    return redirect(url_for('login'))
+
+@app.route('/library_home')
+def library_home():
+    if 'username' in session and session.get('role') == 'staff' and session.get('staff_type') == 'Library':
+        # Fetch and display data relevant to library staff
+        return render_template('library_home.html')
     return redirect(url_for('login'))
 
 @app.route('/student_home')
@@ -244,10 +309,390 @@ def student_home():
 
         connection.close()
 
-        return render_template('student_home.html', student=student_data)
+        return render_template('student_home.html', student=student_data, stu_id=student_id)
     else:
         return redirect('/login')
 
+@app.route('/add_hostel_fee', methods=['GET', 'POST'])
+def add_hostel_fee():
+    if request.method == 'POST':
+        reg_id = request.form['reg_id']
+        
+        # Fetch the student ID based on the registration ID
+        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        
+        if not student:
+            return "Student not found", 404
+        
+        stu_id = student['stu_id']
+        fee_type = request.form['fee_type']
+        amount = request.form['amount']
+        due_date = request.form['due_date']
+        status = request.form.get('status', 'Unpaid')
+        description = request.form.get('description', '')
+
+        # Insert the fee record into the hostel_fees table
+        sql_query = """
+        INSERT INTO hostel_fees (stu_id, reg_id, fee_type, amount, due_date, status, description)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        iud(sql_query, (stu_id, reg_id, fee_type, amount, due_date, status, description))
+        
+        return redirect(url_for('hostel_home'))
+
+    return render_template('add_hostel_fee.html')
+
+@app.route('/search_hostel_dues', methods=['GET'])
+def search_hostel_dues():
+    search_query = request.args.get('query', '')
+    
+    connection = get_db_connection()
+    cursor = connection.cursor(pymysql.cursors.DictCursor)
+    
+    sql_query = """
+    SELECT s.reg_id, s.student_name, h.fee_type, h.amount, h.due_date, h.status, h.description 
+    FROM students s 
+    JOIN hostel_fees h ON s.reg_id = h.reg_id 
+    WHERE s.reg_id LIKE %s OR s.student_name LIKE %s
+    """
+    
+    cursor.execute(sql_query, (f'%{search_query}%', f'%{search_query}%'))
+    results = cursor.fetchall()
+    
+    cursor.close()
+    connection.close()
+    
+    return jsonify(results)
+
+@app.route('/edit_hostel_fee/<reg_id>', methods=['GET', 'POST'])
+def edit_hostel_fee(reg_id):
+    if request.method == 'POST':
+        # Get updated data from the form
+        fee_type = request.form['fee_type']
+        amount = request.form['amount']
+        due_date = request.form['due_date']
+        description = request.form['description']
+        status = request.form['status']
+        
+        # Update query
+        qry = """UPDATE hostel_fees 
+                 SET fee_type = %s, amount = %s, due_date = %s, description = %s, status = %s 
+                 WHERE reg_id = %s"""
+        val = (fee_type, amount, due_date, description, status, reg_id)
+        
+        # Execute the update
+        iud(qry, val)
+        
+        flash('Hostel fee updated successfully', 'success')
+        return redirect(url_for('hostel_home'))
+    else:
+        # Retrieve the existing data for the specified reg_id
+        qry = "SELECT * FROM hostel_fees WHERE reg_id = %s"
+        hostel_fees = selectone(qry, reg_id)
+        
+        if hostel_fees:
+            # Pass the existing data to the template
+            return render_template('edit_hostel_fee.html', hostel_fees=hostel_fees)
+        else:
+            flash('Hostel fee not found', 'danger')
+            return redirect(url_for('hostel_home'))
+
+@app.route('/delete_hostel_fee/<reg_id>', methods=['POST'])
+def delete_hostel_fee(reg_id):
+    # Delete the student from the database
+    iud("DELETE FROM hostel_fees WHERE reg_id=%s", (reg_id,))
+    return redirect(url_for('hostel_home'))
+
+@app.route('/add_library_fee', methods=['GET', 'POST'])
+def add_library_fee():
+    if request.method == 'POST':
+        reg_id = request.form['reg_id']
+        
+        # Fetch the student ID based on the registration ID
+        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        
+        if not student:
+            return "Student not found", 404
+        
+        stu_id = student['stu_id']
+        book_id = request.form['book_id']
+        due_date = request.form['due_date']
+        return_date = request.form.get('return_date', None)
+        fine_per_day = request.form['fine_per_day']
+        total_fine = request.form.get('total_fine', '0.00')
+        status = request.form.get('status', 'Unpaid')
+
+        # Insert the fee record into the library_fees table
+        sql_query = """
+        INSERT INTO library_fees (reg_id, book_id, due_date, return_date, fine_per_day, total_fine, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        iud(sql_query, (reg_id, book_id, due_date, return_date, fine_per_day, total_fine, status))
+        
+        return redirect(url_for('library_home'))
+
+    return render_template('add_library_fee.html')
+@app.route('/search_library_fees', methods=['GET'])
+def search_library_fees():
+    query = request.args.get('query', '').strip()
+    
+    if not query:
+        return jsonify([])  # Return an empty list if no query is provided
+    
+    # Search for library fees based on the provided registration ID
+    sql_query = f"SELECT reg_id, book_id, due_date, return_date, fine_per_day, total_fine, status FROM library_fees WHERE reg_id = '{query}'"
+    fees = selectall(sql_query)  
+    return jsonify(fees)
+
+@app.route('/edit_library_fee/<reg_id>', methods=['GET', 'POST'])
+def edit_library_fee(reg_id):
+    if request.method == 'POST':
+        book_id = request.form['book_id']
+        due_date = request.form['due_date']
+        return_date = request.form.get('return_date', None)
+        fine_per_day = float(request.form['fine_per_day'])
+        status = request.form['status']
+
+        # Calculate the total fine if return_date is provided
+        total_fine = 0
+        if return_date:
+            due_date_dt = datetime.strptime(due_date, '%Y-%m-%d')
+            return_date_dt = datetime.strptime(return_date, '%Y-%m-%d')
+            overdue_days = (return_date_dt - due_date_dt).days
+
+            if overdue_days > 0:
+                total_fine = overdue_days * fine_per_day
+
+        # Update the library fee record
+        sql_query = """
+        UPDATE library_fees
+        SET book_id=%s, due_date=%s, return_date=%s, fine_per_day=%s, total_fine=%s, status=%s
+        WHERE reg_id=%s
+        """
+        iud(sql_query, (book_id, due_date, return_date, fine_per_day, total_fine, status, reg_id))
+
+        return redirect(url_for('library_home'))
+
+    # Fetch the existing data for the library fee
+    fee = selectone("SELECT * FROM library_fees WHERE reg_id=%s", (reg_id,))
+    if not fee:
+        return "Fee record not found", 404
+
+    return render_template('edit_library_fee.html', fee=fee)
+
+@app.route('/delete_library_fee/<reg_id>', methods=['POST'])
+def delete_library_fee(reg_id):
+    # SQL query to delete the fee record
+    sql_query = "DELETE FROM library_fees WHERE reg_id=%s"
+    iud(sql_query, (reg_id,))  # Execute the delete query
+
+    return redirect(url_for('library_home'))  # Redirect to the library home after deletion
+
+@app.route('/add_department_fee', methods=['GET', 'POST'])
+def add_department_fee():
+    if request.method == 'POST':
+        reg_id = request.form['reg_id']
+        
+        # Fetch the student ID based on the registration ID
+        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        
+        if not student:
+            return "Student not found", 404
+        
+        stu_id = student['stu_id']
+        dept_name = request.form['dept_name']
+        amount = request.form['amount']
+        due_date = request.form['due_date']
+        status = request.form.get('status', 'Unpaid')
+        description = request.form.get('description', '')
+
+        # Insert the fee record into the department_fees table
+        sql_query = """
+        INSERT INTO department_fees (stu_id, reg_id, dept_name, amount, due_date, status, description)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        iud(sql_query, (stu_id, reg_id, dept_name, amount, due_date, status, description))
+        
+        return redirect(url_for('department_home'))
+
+    return render_template('add_department_fee.html')
+@app.route('/search_department_fees')
+def search_department_fees():
+    query = request.args.get('query')
+    
+    # Assuming you're using pymysql
+    sql = """
+        SELECT * FROM department_fees 
+        WHERE reg_id LIKE %s OR dept_name LIKE %s
+    """
+    values = ('%' + query + '%', '%' + query + '%')
+    
+    results = selectall2(sql, values)
+    
+    return jsonify(results)
+@app.route('/edit_department_fee/<reg_id>', methods=['GET', 'POST'])
+def edit_department_fee(reg_id):
+    if request.method == 'POST':
+        # Get updated data from the form
+        dept_name = request.form['dept_name']
+        fee_type = request.form['fee_type']
+        amount = request.form['amount']
+        due_date = request.form['due_date']
+        description = request.form['description']
+        status = request.form['status']
+        
+        # Update query
+        qry = """UPDATE department_fees 
+                 SET dept_name = %s, fee_type = %s, amount = %s, due_date = %s, description = %s, status = %s 
+                 WHERE reg_id = %s"""
+        val = (dept_name, fee_type, amount, due_date, description, status, reg_id)
+        
+        # Execute the update
+        iud(qry, val)
+        
+        flash('Department fee updated successfully', 'success')
+        return redirect(url_for('department_home'))
+    else:
+        # Retrieve the existing data for the specified reg_id
+        qry = "SELECT * FROM department_fees WHERE reg_id = %s"
+        department_fee = selectone(qry, reg_id)
+        
+        if department_fee:
+            # Pass the existing data to the template
+            return render_template('edit_department_fee.html', department_fee=department_fee)
+        else:
+            flash('Department fee not found', 'danger')
+            return redirect(url_for('department_home'))
+@app.route('/delete_department_fee/<reg_id>', methods=['POST'])
+def delete_department_fee(reg_id):
+    # Delete query
+    qry = "DELETE FROM department_fees WHERE reg_id = %s"
+    val = (reg_id,)
+    
+    # Execute the delete query
+    iud(qry, val)
+    
+    flash('Department fee deleted successfully', 'success')
+    return redirect(url_for('department_home'))
+@app.route('/add_office_fee', methods=['GET', 'POST'])
+def add_office_fee():
+    if request.method == 'POST':
+        reg_id = request.form['reg_id']
+        
+        # Fetch the student ID based on the registration ID
+        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        
+        if not student:
+            return "Student not found", 404
+        
+        stu_id = student['stu_id']
+
+        fee_type = request.form['fee_type']
+        due_date = request.form['due_date']
+        description = request.form.get('description', '')
+        installment = request.form.get('installment', False)  # Check if installment option is selected
+        installment_amount = request.form.get('installment_amount', None)
+        installment_due_date = request.form.get('installment_due_date', None)
+        num_installments = request.form.get('num_installments', None)
+
+        # Insert the fee record into the office_fees table
+        sql_query = """
+        INSERT INTO office_fees (stu_id, reg_id, fee_type, due_date, description, 
+        installment, installment_amount, installment_due_date, num_installments)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        iud(sql_query, (stu_id, reg_id, fee_type, due_date, description, 
+                        installment, installment_amount, installment_due_date, num_installments))
+        
+        return redirect(url_for('office_home'))
+
+    return render_template('add_office_fee.html')
+
+@app.route('/search_office_dues', methods=['GET'])
+def search_office_dues():
+    query = request.args.get('query', '').strip()
+    
+    if not query:
+        return jsonify([])  # Return an empty list if no query is provided
+    
+    # Search for office fees based on the provided registration ID
+    sql_query = f"""
+    SELECT 
+        reg_id, 
+        fee_type, 
+        amount, 
+        due_date, 
+        description, 
+        installment 
+    FROM office_fees 
+    WHERE reg_id = '{query}'
+    """
+    fees = selectall(sql_query)
+    return jsonify(fees)
+@app.route('/edit_office_fee/<reg_id>', methods=['GET', 'POST'])
+def edit_office_fee(reg_id):
+    if request.method == 'POST':
+        # Capture form data
+        fee_type = request.form['fee_type']
+        amount = request.form['amount']
+        due_date = request.form['due_date']
+        description = request.form['description']
+
+        # Checkbox handling
+        installment = 'installment' in request.form
+        installment_amount = request.form.get('installment_amount', 0) if installment else 0
+        installment_due_date = request.form.get('installment_due_date', None) if installment else None
+        num_installments = request.form.get('num_installments', 0) if installment else 0
+        amount = request.form['amount']
+        # Update the database
+        query = """UPDATE office_fees SET fee_type=%s, due_date=%s, description=%s, 
+                   installment=%s, installment_amount=%s, installment_due_date=%s, num_installments=%s, amount=%s 
+                   WHERE reg_id=%s"""
+        values = (fee_type, due_date, description, int(installment), 
+                  installment_amount, installment_due_date, num_installments, amount, reg_id)
+        iud(query, values)  # Ensure iud function handles None correctly
+
+        return redirect(url_for('office_home'))
+
+    # Fetch existing data
+    query = "SELECT * FROM office_fees WHERE reg_id=%s"
+    office_fee = selectone(query, (reg_id,))
+
+    if not office_fee:
+        return "Office fee record not found", 404
+
+    return render_template('edit_office_fee.html', office_fee=office_fee)
+@app.route('/fetch_all_fees')
+def fetch_all_fees():
+    reg_id = request.args.get('reg_id')
+
+    if reg_id:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Query for hostel fees
+        cursor.execute("SELECT 'Hostel' AS source, fee_type, description, amount, due_date FROM hostel_fees WHERE reg_id = %s", (reg_id,))
+        hostel_fees = cursor.fetchall()
+
+        # Query for office fees
+        cursor.execute("SELECT 'Office' AS source, fee_type, description, amount, due_date FROM office_fees WHERE reg_id = %s", (reg_id,))
+        office_fees = cursor.fetchall()
+
+        # Query for department fees
+        cursor.execute("SELECT 'Department' AS source, fee_type, description, amount, due_date FROM department_fees WHERE reg_id = %s", (reg_id,))
+        department_fees = cursor.fetchall()
+
+        cursor.execute("SELECT 'Library' AS source, 'Book fine'AS fee_type, status AS description, 'total_fine' AS amount, due_date FROM library_fees WHERE reg_id = %s", (reg_id,))
+        library_fees = cursor.fetchall()
+        # Combine all fees
+        all_fees = hostel_fees + office_fees + department_fees + library_fees
+
+        connection.close()
+
+        # Return all fees as JSON
+        return jsonify(all_fees)
+    else:
+        return jsonify([])  # Return an empty list if no reg_id is provided
 
 @app.route('/logout')
 def logout():
