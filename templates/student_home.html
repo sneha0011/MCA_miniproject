@@ -175,39 +175,53 @@
 
         <!-- Manage Dues Section -->
         <div id="manage-dues" class="main-content">
-            <h2>Manage Dues</h2>
-            <form>
-                <label for="search-dues">Search Dues:</label>
-                <input type="text" id="search-dues" placeholder="Search by Type or Date">
-                <button type="submit">Search</button>
-            </form>
-
-            <h3>Current Dues and Fees</h3>
-            <table>
+            <h2>Current Dues and Fees</h2>
+            <table >
                 <thead>
                     <tr>
-                        <th>Type</th>
+                        <th>Source</th>
+                        <th>Fee Type</th>
+                        <th>Description</th>
                         <th>Amount</th>
-                        <th>Date</th>
-                        <th>Status</th>
-                        <th>Installment Period</th>
-                        <th>Actions</th>
+                        <th>Due Date</th>
+
+                        
                     </tr>
                 </thead>
-                <tbody>
-                    {% for due in dues %}
-                    <tr>
-                        <td>{{ due.type }}</td>
-                        <td>{{ due.amount }}</td>
-                        <td>{{ due.date }}</td>
-                        <td>{{ due.status }}</td>
-                        <td>{{ due.installment_period }}</td>
-                        <td><button onclick="showPaymentForm('{{ due.id }}')">Pay</button></td>
-                    </tr>
-                    {% endfor %}
+                <tbody id="fees-table-body">
+                 
                 </tbody>
             </table>
         </div>
     </div>
 </body>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+    const reg_id = '{{ student.reg_id }}'; // Automatically loaded from Flask
+    fetchAndDisplayFees(reg_id);
+});
+
+function fetchAndDisplayFees(reg_id) {
+    fetch(`/fetch_all_fees?reg_id=${reg_id}`)
+        .then(response => response.json())
+        .then(data => {
+            const tableBody = document.getElementById('fees-table-body');
+            tableBody.innerHTML = ''; // Clear previous data
+
+            data.forEach(fee => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${fee.source}</td>
+                    <td>${fee.fee_type}</td>
+                    <td>${fee.description}</td>
+                    <td>${fee.amount}</td>
+                    <td>${fee.due_date}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        })
+        .catch(error => console.error('Error fetching fees:', error));
+}
+
+</script>
 </html>
