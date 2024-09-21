@@ -196,46 +196,28 @@
     </tbody>
 </table>
         </div>
-
-        <!-- View Dues and Fees Section -->
         <div id="view-dues-fees" class="main-content">
             <h2 class="section-title">View Dues and Fees</h2>
-            <form>
-                <label for="search">Search by Student ID or Name:</label>
-                <input type="text" id="search" name="search" placeholder="Enter Student ID or Name">
-                <button type="submit">Search</button>
+            <form id="search-form" onsubmit="event.preventDefault(); fetchAllFees();">
+                <label for="fee-search">Search by Student Register ID:</label>
+                <input type="text" id="fee-search" name="search" placeholder="Enter Register ID" oninput="fetchAllFees()">
             </form>
-
-            <h3>Dues and Fees</h3>
-            <table>
+            <table id="fees-table">
                 <thead>
                     <tr>
-                        <th>Student ID</th>
-                        <th>Name</th>
+                        <th>Source</th>
                         <th>Type</th>
+                        <th>Description</th>
                         <th>Amount</th>
-                        <th>Date</th>
-                        <th>Status</th>
-                        <th>Installment Period</th>
+                        <th>Due Date</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- Example data; replace with dynamic data -->
-                    <tr>
-                        <td>123</td>
-                        <td>John Smith</td>
-                        <td>Tuition</td>
-                        <td>$500</td>
-                        <td>2024-08-01</td>
-                        <td>Pending</td>
-                        <td>August 2024</td>
-                    </tr>
-                    <!-- More rows as needed -->
+                    <!-- Fee data will be inserted here dynamically -->
                 </tbody>
             </table>
         </div>
-    </div>
-
+        
     <script>
         function filterStaff() {
     var input = document.getElementById("staff-search");
@@ -301,6 +283,39 @@ function filterStudents() {
         })
         .catch(error => console.error('Error:', error));
 }
+function fetchAllFees() {
+    var input = document.getElementById("fee-search");
+    var regId = input.value.trim();
+
+    if (regId) {
+        fetch(`/fetch_all_fees?reg_id=${encodeURIComponent(regId)}`)
+            .then(response => response.json())
+            .then(data => {
+                var tableBody = document.querySelector("#fees-table tbody");
+                tableBody.innerHTML = "";  // Clear existing table rows
+
+                if (data.length > 0) {
+                    data.forEach(fee => {
+                        var row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${fee.source}</td>
+                            <td>${fee.fee_type}</td>
+                            <td>${fee.description}</td>
+                            <td>${fee.amount}</td>
+                            <td>${fee.due_date}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                } else {
+                    var row = document.createElement("tr");
+                    row.innerHTML = `<td colspan="5">No fees found for this student.</td>`;
+                    tableBody.appendChild(row);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+}
+
     </script>
 </body>
 </html>
