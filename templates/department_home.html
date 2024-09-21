@@ -157,7 +157,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- Dynamic content will be inserted here -->
+
                 </tbody>
             </table>
         </div>
@@ -183,7 +183,7 @@
                     </tr>
                 </thead>
                 <tbody id="dues-table-body">
-                    <!-- Results will be populated here -->
+             
                 </tbody>
             </table>
         </div>
@@ -239,7 +239,7 @@ function filterViewDues() {
     var filter = input.value.trim();
     
     if (filter === "") {
-        alert("Please enter a Name or Registration ID to search.");
+        alert("Please enter a Department Name or Registration ID to search.");
         return;
     }
     
@@ -247,7 +247,7 @@ function filterViewDues() {
         .then(response => response.json())
         .then(data => {
             var tableBody = document.querySelector("#dues-table-body");
-            tableBody.innerHTML = ""; // Clear existing table rows
+            tableBody.innerHTML = ""; 
             
             if (data.length > 0) {
                 data.forEach(due => {
