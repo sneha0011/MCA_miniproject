@@ -5,7 +5,7 @@ from db import get_db_connection
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Replace with your actual secret key
+app.secret_key = 'your_secret_key' 
 
 @app.route('/')
 def index():
@@ -16,7 +16,7 @@ def home():
     if 'username' in session:
         role = session.get('role')
         if role == 'admin':
-            return redirect(url_for('admin_home'))  # Redirect to Admin homepage
+            return redirect(url_for('admin_home')) 
         elif role == 'staff':
             staff_type = session.get('staff_type')
             if staff_type == 'Hostel':
@@ -501,6 +501,7 @@ def add_department_fee():
         
         stu_id = student['stu_id']
         dept_name = request.form['dept_name']
+        fee_type=request.form['fee_type']
         amount = request.form['amount']
         due_date = request.form['due_date']
         status = request.form.get('status', 'Unpaid')
@@ -508,10 +509,10 @@ def add_department_fee():
 
         # Insert the fee record into the department_fees table
         sql_query = """
-        INSERT INTO department_fees (stu_id, reg_id, dept_name, amount, due_date, status, description)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO department_fees (stu_id, reg_id, fee_type, dept_name, amount, due_date, status, description)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
-        iud(sql_query, (stu_id, reg_id, dept_name, amount, due_date, status, description))
+        iud(sql_query, (stu_id, reg_id, fee_type, dept_name, amount, due_date, status, description))
         
         return redirect(url_for('department_home'))
 
@@ -662,6 +663,22 @@ def edit_office_fee(reg_id):
         return "Office fee record not found", 404
 
     return render_template('edit_office_fee.html', office_fee=office_fee)
+@app.route('/delete_office_fee/<reg_id>', methods=['POST'])
+def delete_office_fee(reg_id):
+    # Delete query
+    qry = "DELETE FROM office_fees WHERE reg_id = %s"
+    val = (reg_id,)
+    
+    # Execute the delete query
+    iud(qry, val)
+
+    return redirect(url_for('office_home'))
+    
+@app.route('/test_fetch_fees')
+def test_fetch_fees():
+    return render_template('test_fetch_fees.html')
+
+
 @app.route('/fetch_all_fees')
 def fetch_all_fees():
     reg_id = request.args.get('reg_id')
@@ -682,8 +699,16 @@ def fetch_all_fees():
         cursor.execute("SELECT 'Department' AS source, fee_type, description, amount, due_date FROM department_fees WHERE reg_id = %s", (reg_id,))
         department_fees = cursor.fetchall()
 
-        cursor.execute("SELECT 'Library' AS source, 'Book fine'AS fee_type, status AS description, 'total_fine' AS amount, due_date FROM library_fees WHERE reg_id = %s", (reg_id,))
+        # Query for library fees (fixed)
+        cursor.execute("SELECT 'Library' AS source, 'Book fine' AS fee_type, status AS description, total_fine AS amount, due_date FROM library_fees WHERE reg_id = %s", (reg_id,))
         library_fees = cursor.fetchall()
+        
+        hostel_fees = list(hostel_fees) if not isinstance(hostel_fees, list) else hostel_fees
+        office_fees = list(office_fees) if not isinstance(office_fees, list) else office_fees
+        department_fees = list(department_fees) if not isinstance(department_fees, list) else department_fees
+        library_fees = list(library_fees) if not isinstance(library_fees, list) else library_fees
+
+
         # Combine all fees
         all_fees = hostel_fees + office_fees + department_fees + library_fees
 
@@ -693,6 +718,7 @@ def fetch_all_fees():
         return jsonify(all_fees)
     else:
         return jsonify([])  # Return an empty list if no reg_id is provided
+
 
 @app.route('/logout')
 def logout():
