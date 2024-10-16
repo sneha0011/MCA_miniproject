@@ -4,12 +4,107 @@ from db import iud, selectone, selectall, selectall2
 from db import get_db_connection
 from datetime import datetime
 
+import razorpay
+
+import random
+
+from flask_mail import *
+
+
 app = Flask(__name__)
-app.secret_key = 'your_secret_key' 
+app.secret_key = '68444982465546' 
+
+
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # Use the server for your mail service
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_USERNAME'] = 'duetrackermp@gmail.com'  # Your email address
+app.config['MAIL_PASSWORD'] = 'tzjm pmpz ibkl kzyi'  # Your email password
+app.config['MAIL_DEFAULT_SENDER'] = ('Due_Tracker', 'duetrackermp@gmail.com')
+
+mail = Mail(app)
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/forgot_password')
+def forgot_password():
+    return render_template("forgot_password.html")
+
+
+@app.route('/forgot_password2', methods=['post'])
+def forgot_password2():
+
+    email = request.form['textfield']
+    session['email'] = email
+
+    qry = "SELECT * FROM `login` WHERE `username`=%s"
+
+    res = selectone(qry, email)
+
+    print(res)
+
+    if res is None:
+        return ''''<script>alert("Invalid email address");window.location="/forgot_password"</script>'''
+    else:
+
+        random_number = random.randint(1000, 9999)
+
+        print(random_number)
+
+        s = random_number
+        session['otp'] = random_number
+
+        def mail(s, email):
+            try:
+                print("ïm hereeeee")
+                gmail = smtplib.SMTP('smtp.gmail.com', 587)
+                gmail.ehlo()
+                gmail.starttls()
+                gmail.login('duetrackermp@gmail.com', 'tzjm pmpz ibkl kzyi')
+                print("okkkkkk")
+            except Exception as e:
+                print("Couldn't setup email!!" + str(e))
+            msg = MIMEText("Your OTP to verify Email: " + str(s)+ " Dont share your OTP")
+            print(msg)
+            msg['Subject'] = 'Verify your email'
+            msg['To'] = email
+            msg['From'] = 'duetrackermp@gmail.com'
+            try:
+                gmail.send_message(msg)
+                print("Done =====================")
+                  
+
+            except Exception as e:
+                print("COULDN'T SEND EMAIL", str(e))
+                return ''''<script>alert("COULDN'T SEND EMAIL");window.location="/forgot_password"</script>'''
+        
+        mail(s,email)
+        return render_template("otp.html")
+
+     
+@app.route("/verify_otp", methods=['post'])
+def verify_otp():
+    otp = request.form['textfield']
+    print("otpp",otp)
+    print("session otp", session['otp'])
+    if int(otp) == int(session['otp']):
+        return render_template("new_password.html")
+    else:
+        return ''''<script>alert("OTP missmatch. Please Enter the valid otp");window.location="/forgot_password"</script>'''
+
+     
+@app.route("/new_password", methods=['post'])
+def new_password():
+    new_password = request.form['textfield']
+    qry = "UPDATE `login` SET `password`=%s WHERE `username`=%s"
+    iud(qry,(new_password,session['email']))
+    return ''''<script>alert("Password Changed Successfully");window.location="/"</script>'''
+
 
 @app.route('/home')
 def home():
@@ -688,19 +783,19 @@ def fetch_all_fees():
         cursor = connection.cursor()
 
         # Query for hostel fees
-        cursor.execute("SELECT 'Hostel' AS source, fee_type, description, amount, due_date FROM hostel_fees WHERE reg_id = %s", (reg_id,))
+        cursor.execute("SELECT 'Hostel' AS source, fee_id, reg_id, fee_type, description, amount, due_date, status FROM hostel_fees WHERE reg_id = %s", (reg_id,))
         hostel_fees = cursor.fetchall()
 
         # Query for office fees
-        cursor.execute("SELECT 'Office' AS source, fee_type, description, amount, due_date FROM office_fees WHERE reg_id = %s", (reg_id,))
+        cursor.execute("SELECT 'Office' AS source,  fee_id, reg_id, fee_type, description, amount, due_date, status FROM office_fees WHERE reg_id = %s", (reg_id,))
         office_fees = cursor.fetchall()
 
         # Query for department fees
-        cursor.execute("SELECT 'Department' AS source, fee_type, description, amount, due_date FROM department_fees WHERE reg_id = %s", (reg_id,))
+        cursor.execute("SELECT 'Department' AS source,  fee_id, reg_id, fee_type, description, amount, due_date, status FROM department_fees WHERE reg_id = %s", (reg_id,))
         department_fees = cursor.fetchall()
 
         # Query for library fees (fixed)
-        cursor.execute("SELECT 'Library' AS source, 'Book fine' AS fee_type, status AS description, total_fine AS amount, due_date FROM library_fees WHERE reg_id = %s", (reg_id,))
+        cursor.execute("SELECT 'Library' AS source, 'Book fine' AS fee_type, book_id AS description, total_fine AS amount, fee_id, reg_id, due_date, status FROM library_fees WHERE reg_id = %s", (reg_id,))
         library_fees = cursor.fetchall()
         
         hostel_fees = list(hostel_fees) if not isinstance(hostel_fees, list) else hostel_fees
@@ -726,5 +821,83 @@ def logout():
     session.pop('role', None)
     return redirect(url_for('login'))
 
+
+@app.route("/student_pay_due")
+def student_pay_due():
+    amt = request.args.get('amt')
+
+    session['amt']  = int(float(amt))
+    id = request.args.get('fee_id')
+
+    session['due_id'] = id
+
+    std_id = request.args.get('std_id')
+
+    session['std_id'] = std_id
+
+    source = request.args.get('fee_type')
+
+    session['due_type'] = source
+
+
+    return redirect("/user_pay_proceed")
+
+
+@app.route('/user_pay_proceed')
+def user_pay_proceed():
+    client = razorpay.Client(auth=("rzp_test_edrzdb8Gbx5U5M", "XgwjnFvJQNG6cS7Q13aHKDJj"))
+    print(client)
+    payment = client.order.create({'amount': int(float(session['amt']*100)), 'currency': "INR", 'payment_capture': '1'})
+    return render_template('UserPayProceed.html',p=payment)
+@app.route('/user_pay_complete', methods=['POST'])
+def user_pay_complete():
+    print(request.form)
+    pid = request.form['razorpay_payment_id']
+    fee_type = session.get('due_type')  # This will hold which fee type (office, library, department, or hostel)
+    due_id = session.get('due_id')  # The specific fee entry to be updated
+    amt = session.get('amt')
+   
+    # Fetch the student's email from the session
+    qry = "SELECT `email` FROM `students` WHERE `reg_id`=%s"
+    res = selectone(qry, session['std_id'])  # Assuming reg_id is in session
+    email = res['email']
+    
+    # Sending confirmation email
+    try:
+        gmail = smtplib.SMTP('smtp.gmail.com', 587)
+        gmail.ehlo()
+        gmail.starttls()
+        gmail.login('duetrackermp@gmail.com', 'your-email-password')
+    except Exception as e:
+        print("Couldn't setup email!!" + str(e))
+    
+    msg = MIMEText(f"Hello\nYour payment was successful for Fee Type: {fee_type.capitalize()}\nAmount: {amt}\nPayment ID: {pid}\nYou can login to view payment details.")
+    msg['Subject'] = 'Payment Confirmation'
+    msg['To'] = email
+    msg['From'] = 'duetrackermp@gmail.com'
+    
+    try:
+        gmail.send_message(msg)
+    except Exception as e:
+        print("Couldn't send email: ", str(e))
+
+    # Update the payment status in the respective table based on fee_type
+    if fee_type == 'Office':
+        qry = "UPDATE `office_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+    elif fee_type == 'Library':
+        qry = "UPDATE `library_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+    elif fee_type == 'Department':
+        qry = "UPDATE `department_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+    elif fee_type == 'Hostel':
+        qry = "UPDATE `hostel_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+    else:
+        return '''<script>alert("Invalid Fee Type!",fee_type);window.location="student_home"</script>'''
+
+    # Execute the update query
+    iud(qry, (pid, due_id))
+
+
+    return '''<script>alert("Payment successful!");window.location="student_home"</script>'''
+	
 if __name__ == '__main__':
     app.run(debug=True)
