@@ -133,7 +133,16 @@
             <form action="{{ url_for('add_department_fee') }}" method="POST">
                 <div class="form-group">
                     <label for="dept_name">Department Name</label>
-                    <input type="text" id="dept_name" name="dept_name" required>
+                    <select id="dept_name" name="dept_name" required>
+                        <option value="" disabled selected>Select Department</option>
+                        <option value="Computer Science">Computer Science</option>
+                        <option value="Mechanical Engineering">Mechanical Engineering</option>
+                        <option value="Electrical Engineering">Electrical Engineering</option>
+                        <option value="Civil Engineering">Civil Engineering</option>
+                        <option value="Electronics and Communication">Electronics and Communication</option>
+                        <option value="Biotechnology">Biotechnology</option>
+                        <option value="MCA">MCA</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="reg_id">Registration ID</label>
@@ -141,7 +150,14 @@
                 </div>
                 <div class="form-group">
                     <label for="fee_type">Fee Type</label>
-                    <input type="text" id="fee_type" name="fee_type" required>
+                    <select id="fee_type" name="fee_type" required>
+                        <option value="" disabled selected>Select Fee Type</option>
+                        <option value="Lab Fee">Lab Fee</option>
+                        <option value="Laptop">Laptop</option>
+                        <option value="Damage Fee">Damage Fee</option>
+                        <option value="Workshop">Workshop</option>
+                        <option value="Miscellaneous">Miscellaneous</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="amount">Amount</label>
