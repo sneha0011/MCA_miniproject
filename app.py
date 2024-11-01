@@ -3,7 +3,7 @@ import pymysql
 from db import iud, selectone, selectall, selectall2
 from db import get_db_connection
 from datetime import datetime
-
+from decimal import Decimal
 import razorpay
 
 import random
@@ -61,7 +61,6 @@ def forgot_password2():
 
         def mail(s, email):
             try:
-                print("ïm hereeeee")
                 gmail = smtplib.SMTP('smtp.gmail.com', 587)
                 gmail.ehlo()
                 gmail.starttls()
@@ -76,7 +75,7 @@ def forgot_password2():
             msg['From'] = 'duetrackermp@gmail.com'
             try:
                 gmail.send_message(msg)
-                print("Done =====================")
+                print("Done ")
                   
 
             except Exception as e:
@@ -414,12 +413,13 @@ def add_hostel_fee():
         reg_id = request.form['reg_id']
         
         # Fetch the student ID based on the registration ID
-        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        student = selectone("SELECT stu_id, email FROM students WHERE reg_id=%s", (reg_id,))
         
         if not student:
             return "Student not found", 404
         
         stu_id = student['stu_id']
+        student_email = student['email']
         fee_type = request.form['fee_type']
         amount = request.form['amount']
         due_date = request.form['due_date']
@@ -432,7 +432,14 @@ def add_hostel_fee():
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         iud(sql_query, (stu_id, reg_id, fee_type, amount, due_date, status, description))
-        
+        # Send a fee reminder email to the student
+        try:
+            msg = Message("Fee Due Reminder", recipients=[student_email])
+            msg.body = f"Dear Student,\n\nYou have a new {fee_type} due of Rs.{amount} on {due_date}.\nPlease ensure timely payment to avoid penalties.\n\nThank you."
+            mail.send(msg)
+        except Exception as e:
+            return f"Error sending email: {e}", 500
+
         return redirect(url_for('hostel_home'))
 
     return render_template('add_hostel_fee.html')
@@ -504,26 +511,54 @@ def add_library_fee():
         reg_id = request.form['reg_id']
         
         # Fetch the student ID based on the registration ID
-        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        student = selectone("SELECT stu_id, email FROM students WHERE reg_id=%s", (reg_id,))
         
         if not student:
             return "Student not found", 404
         
         stu_id = student['stu_id']
+        student_email = student['email']
         book_id = request.form['book_id']
         due_date = request.form['due_date']
-        return_date = request.form.get('return_date', None)
+        fee_type = request.form['fee_type']
+        description = request.form['description']
         fine_per_day = request.form['fine_per_day']
         total_fine = request.form.get('total_fine', '0.00')
         status = request.form.get('status', 'Unpaid')
+        
+        existing_fee = selectone("SELECT * FROM library_fees WHERE reg_id=%s AND book_id=%s", (reg_id, book_id))
+        if existing_fee:
+            return "Library fee already exists for this registration ID and book", 400
+        
+        # Calculate total fine based on the fee type
+        if fee_type == "Overdue":
+            # Calculate overdue fine based on current date and due date
+            due_date_obj = datetime.strptime(due_date, "%Y-%m-%d")
+            current_date = datetime.now()
+            overdue_days = (current_date - due_date_obj).days
 
+            # Fine per day is set to 2 by default, so we multiply by overdue days
+            if overdue_days > 0:
+                total_fine = overdue_days * 2
+            else:
+                total_fine = 0  # No fine if not overdue
+        elif fee_type in ["Lost", "Damage"]:
+            # Use the total fine entered by the staff for Lost or Damage cases
+            total_fine = request.form.get('total_fine', '0.00')
         # Insert the fee record into the library_fees table
         sql_query = """
-        INSERT INTO library_fees (reg_id, book_id, due_date, return_date, fine_per_day, total_fine, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO library_fees (reg_id, book_id, due_date, fee_type, fine_per_day, total_fine, status, description)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
-        iud(sql_query, (reg_id, book_id, due_date, return_date, fine_per_day, total_fine, status))
+        iud(sql_query, (reg_id, book_id, due_date, fee_type, fine_per_day, total_fine, status, description))
         
+        # Send a fee reminder email to the student
+        try:
+            msg = Message("Fee Due Reminder", recipients=[student_email])
+            msg.body = f"Dear Student,\n\nYou have a new library due({fee_type}) of {total_fine} on {due_date}.\nPlease ensure timely payment to avoid penalties.\n\nThank you."
+            mail.send(msg)
+        except Exception as e:
+            return f"Error sending email: {e}", 500
         return redirect(url_for('library_home'))
 
     return render_template('add_library_fee.html')
@@ -535,7 +570,7 @@ def search_library_fees():
         return jsonify([])  # Return an empty list if no query is provided
     
     # Search for library fees based on the provided registration ID
-    sql_query = f"SELECT reg_id, book_id, due_date, return_date, fine_per_day, total_fine, status FROM library_fees WHERE reg_id = '{query}'"
+    sql_query = f"SELECT reg_id, book_id, due_date, fee_type, fine_per_day, total_fine, status FROM library_fees WHERE reg_id = '{query}'"
     fees = selectall(sql_query)  
     return jsonify(fees)
 
@@ -544,27 +579,38 @@ def edit_library_fee(reg_id):
     if request.method == 'POST':
         book_id = request.form['book_id']
         due_date = request.form['due_date']
-        return_date = request.form.get('return_date', None)
+        fee_type = request.form['fee_type']
+        description = request.form['description']
         fine_per_day = float(request.form['fine_per_day'])
         status = request.form['status']
 
-        # Calculate the total fine if return_date is provided
-        total_fine = 0
-        if return_date:
+        return_date = datetime.now().strftime('%Y-%m-%d')
+
+        if fee_type == "Overdue":
             due_date_dt = datetime.strptime(due_date, '%Y-%m-%d')
             return_date_dt = datetime.strptime(return_date, '%Y-%m-%d')
             overdue_days = (return_date_dt - due_date_dt).days
 
+            # Fine per day is set to default (2), or as entered by staff
             if overdue_days > 0:
-                total_fine = overdue_days * fine_per_day
+                total_fine = overdue_days * fine_per_day  # Fine per day may be default or entered by staff
+            else:
+                total_fine = 0  # No fine if not overdue
+
+        elif fee_type in ["Lost", "Damage"]:
+            # Use the total fine entered by the staff for Lost or Damage cases
+            total_fine = request.form.get('total_fine', '0.00')
+        else:
+            total_fine = 0  # In case of other fee types
+
 
         # Update the library fee record
         sql_query = """
         UPDATE library_fees
-        SET book_id=%s, due_date=%s, return_date=%s, fine_per_day=%s, total_fine=%s, status=%s
+        SET book_id=%s, due_date=%s, fee_type=%s, fine_per_day=%s, total_fine=%s, status=%s, description=%s
         WHERE reg_id=%s
         """
-        iud(sql_query, (book_id, due_date, return_date, fine_per_day, total_fine, status, reg_id))
+        iud(sql_query, (book_id, due_date, fee_type, fine_per_day, total_fine, status, description, reg_id))
 
         return redirect(url_for('library_home'))
 
@@ -589,12 +635,13 @@ def add_department_fee():
         reg_id = request.form['reg_id']
         
         # Fetch the student ID based on the registration ID
-        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        student = selectone("SELECT stu_id, email FROM students WHERE reg_id=%s", (reg_id,))
         
         if not student:
             return "Student not found", 404
         
         stu_id = student['stu_id']
+        student_email = student['email']
         dept_name = request.form['dept_name']
         fee_type=request.form['fee_type']
         amount = request.form['amount']
@@ -609,6 +656,12 @@ def add_department_fee():
         """
         iud(sql_query, (stu_id, reg_id, fee_type, dept_name, amount, due_date, status, description))
         
+        try:
+            msg = Message("Fee Due Reminder", recipients=[student_email])
+            msg.body = f"Dear Student,\n\nYou have a new {fee_type} due of Rs. {amount} on {due_date}.\nPlease ensure timely payment to avoid penalties.\n\nThank you."
+            mail.send(msg)
+        except Exception as e:
+            return f"Error sending email: {e}", 500
         return redirect(url_for('department_home'))
 
     return render_template('add_department_fee.html')
@@ -676,30 +729,40 @@ def add_office_fee():
         reg_id = request.form['reg_id']
         
         # Fetch the student ID based on the registration ID
-        student = selectone("SELECT stu_id FROM students WHERE reg_id=%s", (reg_id,))
+        student = selectone("SELECT stu_id, email FROM students WHERE reg_id=%s", (reg_id,))
         
         if not student:
             return "Student not found", 404
         
         stu_id = student['stu_id']
-
+        student_email = student['email']
         fee_type = request.form['fee_type']
+        amount = request.form['amount']
         due_date = request.form['due_date']
         description = request.form.get('description', '')
-        installment = request.form.get('installment', False)  # Check if installment option is selected
+        installment = 1 if 'installment_checkbox' in request.form else 0 
         installment_amount = request.form.get('installment_amount', None)
         installment_due_date = request.form.get('installment_due_date', None)
         num_installments = request.form.get('num_installments', None)
+        print(request.form)
 
+        if installment == 1:
+            if not installment_amount or not installment_due_date or not num_installments:
+                return "Please provide installment details", 400
         # Insert the fee record into the office_fees table
         sql_query = """
-        INSERT INTO office_fees (stu_id, reg_id, fee_type, due_date, description, 
+        INSERT INTO office_fees (stu_id, reg_id, fee_type, due_date, amount, description, 
         installment, installment_amount, installment_due_date, num_installments)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-        iud(sql_query, (stu_id, reg_id, fee_type, due_date, description, 
+        iud(sql_query, (stu_id, reg_id, fee_type, due_date, amount, description, 
                         installment, installment_amount, installment_due_date, num_installments))
-        
+        try:
+            msg = Message("Fee Due Reminder", recipients=[student_email])
+            msg.body = f"Dear Student,\n\nYou have a new {fee_type} due of Rs. {amount} on {due_date}.\nPlease ensure timely payment to avoid penalties.\n\nThank you."
+            mail.send(msg)
+        except Exception as e:
+            return f"Error sending email: {e}", 500
         return redirect(url_for('office_home'))
 
     return render_template('add_office_fee.html')
@@ -719,7 +782,7 @@ def search_office_dues():
         amount, 
         due_date, 
         description, 
-        installment 
+        installment, status 
     FROM office_fees 
     WHERE reg_id = '{query}'
     """
@@ -735,25 +798,29 @@ def edit_office_fee(reg_id):
         description = request.form['description']
 
         # Checkbox handling
-        installment = 'installment' in request.form
-        installment_amount = request.form.get('installment_amount', 0) if installment else 0
+        installment = 1 if 'installment_checkbox' in request.form else 0 
+        installment_amount = request.form.get('installment_amount', None) if installment else None
         installment_due_date = request.form.get('installment_due_date', None) if installment else None
-        num_installments = request.form.get('num_installments', 0) if installment else 0
-        amount = request.form['amount']
+        num_installments = request.form.get('num_installments', None) if installment else None
+
+        print(f"fee_type: {fee_type}, amount: {amount}, due_date: {due_date}, description: {description}")
+        print(f"installment: {installment}, installment_amount: {installment_amount}, installment_due_date: {installment_due_date}, num_installments: {num_installments}")
+
         # Update the database
-        query = """UPDATE office_fees SET fee_type=%s, due_date=%s, description=%s, 
-                   installment=%s, installment_amount=%s, installment_due_date=%s, num_installments=%s, amount=%s 
-                   WHERE reg_id=%s"""
+        query = """UPDATE office_fees SET fee_type = %s, due_date = %s, description = %s, 
+                   installment = %s, installment_amount = %s, installment_due_date = %s, num_installments = %s, amount = %s 
+                   WHERE reg_id = %s"""
         values = (fee_type, due_date, description, int(installment), 
                   installment_amount, installment_due_date, num_installments, amount, reg_id)
-        iud(query, values)  # Ensure iud function handles None correctly
-
+        print(f"Executing query: {query} with values: {values}")
+        iud(query, values)  # Ensure iud function handles None correctly    
+        
         return redirect(url_for('office_home'))
-
+    
     # Fetch existing data
     query = "SELECT * FROM office_fees WHERE reg_id=%s"
     office_fee = selectone(query, (reg_id,))
-
+    print("Fetched Fee Data:", office_fee)
     if not office_fee:
         return "Office fee record not found", 404
 
@@ -772,8 +839,6 @@ def delete_office_fee(reg_id):
 @app.route('/test_fetch_fees')
 def test_fetch_fees():
     return render_template('test_fetch_fees.html')
-
-
 @app.route('/fetch_all_fees')
 def fetch_all_fees():
     reg_id = request.args.get('reg_id')
@@ -787,17 +852,46 @@ def fetch_all_fees():
         hostel_fees = cursor.fetchall()
 
         # Query for office fees
-        cursor.execute("SELECT 'Office' AS source,  fee_id, reg_id, fee_type, description, amount, due_date, status FROM office_fees WHERE reg_id = %s", (reg_id,))
+        cursor.execute("""
+            SELECT 'Office' AS source, fee_id, reg_id, fee_type, description, amount, due_date, status, installment, installment_amount, installment_due_date, num_installments 
+            FROM office_fees WHERE reg_id = %s
+        """, (reg_id,))
         office_fees = cursor.fetchall()
 
         # Query for department fees
-        cursor.execute("SELECT 'Department' AS source,  fee_id, reg_id, fee_type, description, amount, due_date, status FROM department_fees WHERE reg_id = %s", (reg_id,))
+        cursor.execute("SELECT 'Department' AS source, fee_id, reg_id, fee_type, description, amount, due_date, status FROM department_fees WHERE reg_id = %s", (reg_id,))
         department_fees = cursor.fetchall()
 
-        # Query for library fees (fixed)
-        cursor.execute("SELECT 'Library' AS source, 'Book fine' AS fee_type, book_id AS description, total_fine AS amount, fee_id, reg_id, due_date, status FROM library_fees WHERE reg_id = %s", (reg_id,))
+        # Query for library fees
+        cursor.execute("SELECT 'Library' AS source, fee_type, description, total_fine AS amount, fee_id, reg_id, due_date, status FROM library_fees WHERE reg_id = %s", (reg_id,))
         library_fees = cursor.fetchall()
-        
+
+        # Process office fees with installment logic
+        for fee in office_fees:
+            try:
+                fee_type = fee['fee_type']
+                installment = fee['installment']
+
+                # Check if it's a semester fee and has installments
+                if fee_type.lower() == 'semester_fee' and installment == 1:
+                    if fee['status'] == 'Partially Paid':
+                        # Correctly calculate and update the remaining amount
+                        remaining_amount = fee['amount'] - fee['installment_amount']
+                        print(fee['amount'])
+                        print(fee['installment_amount'])
+                        print(remaining_amount)
+                        # Ensure the remaining amount is displayed correctly
+                        if remaining_amount > 0:
+                            fee['amount'] = remaining_amount  # Display remaining balance
+                        else:
+                            fee['amount'] = 0  # If fully paid, set amount to 0
+                        fee['status'] = "Partially Paid"
+                    elif fee['status'] == 'Unpaid':
+                        # Show the installment amount for unpaid fees
+                        fee['amount'] = fee['installment_amount']
+                        fee['status'] = "Unpaid"
+            except KeyError as e:
+                print(f"KeyError: {e} for fee: {fee}")  # Handle any missing keys
         hostel_fees = list(hostel_fees) if not isinstance(hostel_fees, list) else hostel_fees
         office_fees = list(office_fees) if not isinstance(office_fees, list) else office_fees
         department_fees = list(department_fees) if not isinstance(department_fees, list) else department_fees
@@ -814,6 +908,46 @@ def fetch_all_fees():
     else:
         return jsonify([])  # Return an empty list if no reg_id is provided
 
+@app.route('/fetch_paid_fees')
+def fetch_paid_fees():
+    reg_id = request.args.get('reg_id')
+
+    if reg_id:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Query for paid hostel fees
+        cursor.execute("SELECT 'Hostel' AS source, fee_type, description, amount, due_date, status, payment_id, payment_time FROM hostel_fees WHERE reg_id = %s AND status = 'Paid'", (reg_id,))
+        hostel_fees = cursor.fetchall()
+
+        # Query for paid office fees
+        cursor.execute("SELECT 'Office' AS source, fee_type, description, amount, due_date, status, payment_id, payment_time  FROM office_fees WHERE reg_id = %s AND status = 'Paid'", (reg_id,))
+        office_fees = cursor.fetchall()
+
+        # Query for paid department fees
+        cursor.execute("SELECT 'Department' AS source, fee_type, description, amount, due_date, status, payment_id, payment_time FROM department_fees WHERE reg_id = %s AND status = 'Paid'", (reg_id,))
+        department_fees = cursor.fetchall()
+
+        # Query for paid library fees
+        cursor.execute("SELECT 'Library' AS source, fee_type, description, total_fine AS amount, due_date, status, payment_id, payment_time FROM library_fees WHERE reg_id = %s AND status = 'Paid'", (reg_id,))
+        library_fees = cursor.fetchall()
+
+        hostel_fees = list(hostel_fees) if not isinstance(hostel_fees, list) else hostel_fees
+        office_fees = list(office_fees) if not isinstance(office_fees, list) else office_fees
+        department_fees = list(department_fees) if not isinstance(department_fees, list) else department_fees
+        library_fees = list(library_fees) if not isinstance(library_fees, list) else library_fees
+
+
+        # Combine all paid fees
+        paid_fees = hostel_fees + office_fees + department_fees + library_fees
+
+        connection.close()
+
+        # Return all paid fees as JSON
+        return jsonify(paid_fees)
+    else:
+        return jsonify([])  # Return an empty list if no reg_id is provided
+
 
 @app.route('/logout')
 def logout():
@@ -821,33 +955,31 @@ def logout():
     session.pop('role', None)
     return redirect(url_for('login'))
 
-
 @app.route("/student_pay_due")
 def student_pay_due():
     amt = request.args.get('amt')
 
-    session['amt']  = int(float(amt))
+    # Ensure 'amt' is numeric and store as a float
+    try:
+        session['amt'] = float(amt)
+    except ValueError:
+        return "Invalid amount", 400
+
     id = request.args.get('fee_id')
-
     session['due_id'] = id
-
     std_id = request.args.get('std_id')
-
     session['std_id'] = std_id
-
     source = request.args.get('fee_type')
-
     session['due_type'] = source
 
-
     return redirect("/user_pay_proceed")
-
 
 @app.route('/user_pay_proceed')
 def user_pay_proceed():
     client = razorpay.Client(auth=("rzp_test_edrzdb8Gbx5U5M", "XgwjnFvJQNG6cS7Q13aHKDJj"))
     print(client)
-    payment = client.order.create({'amount': int(float(session['amt']*100)), 'currency': "INR", 'payment_capture': '1'})
+    payment_amount = int(float(session['amt']) * 100)
+    payment = client.order.create({'amount': payment_amount, 'currency': "INR", 'payment_capture': '1'})
     return render_template('UserPayProceed.html',p=payment)
 @app.route('/user_pay_complete', methods=['POST'])
 def user_pay_complete():
@@ -856,7 +988,8 @@ def user_pay_complete():
     fee_type = session.get('due_type')  # This will hold which fee type (office, library, department, or hostel)
     due_id = session.get('due_id')  # The specific fee entry to be updated
     amt = session.get('amt')
-   
+    std_id = session.get('std_id')
+    
     # Fetch the student's email from the session
     qry = "SELECT `email` FROM `students` WHERE `reg_id`=%s"
     res = selectone(qry, session['std_id'])  # Assuming reg_id is in session
@@ -867,7 +1000,7 @@ def user_pay_complete():
         gmail = smtplib.SMTP('smtp.gmail.com', 587)
         gmail.ehlo()
         gmail.starttls()
-        gmail.login('duetrackermp@gmail.com', 'your-email-password')
+        gmail.login('duetrackermp@gmail.com', 'tzjm pmpz ibkl kzyi')
     except Exception as e:
         print("Couldn't setup email!!" + str(e))
     
@@ -881,23 +1014,70 @@ def user_pay_complete():
     except Exception as e:
         print("Couldn't send email: ", str(e))
 
+    payment_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     # Update the payment status in the respective table based on fee_type
     if fee_type == 'Office':
-        qry = "UPDATE `office_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+        qry = "SELECT `amount`, `installment_amount`, `num_installments`, `status` FROM `office_fees` WHERE `fee_id`=%s"
+        fee_entry = selectone(qry, due_id)
+
+        # Amount paid in this transaction
+        paid_amount = Decimal(amt)
+        
+        # Remaining balance after this payment
+        remaining_amount = Decimal(fee_entry['amount']) - paid_amount
+
+        # If the fee has installments
+        if fee_entry['installment_amount'] > 0 and fee_entry['num_installments'] > 1:
+            # First installment payment: update remaining amount and status to "Partially Paid"
+            qry = """
+                UPDATE `office_fees` 
+                SET `installment_amount`=%s, `num_installments`=`num_installments` - 1, `status`='Partially Paid', `payment_id`=%s, `payment_time`=%s 
+                WHERE `fee_id`=%s
+            """
+            iud(qry, (remaining_amount, pid, payment_time, due_id))
+
+        elif fee_entry['installment_amount'] > 0 and fee_entry['num_installments'] == 1:
+            # Second installment payment: mark the fee as "Paid" and update amount to 0
+            qry = """
+                UPDATE `office_fees` 
+                SET `installment_amount`=0, `num_installments`=0, `status`='Paid', `payment_id`=%s, `payment_time`=%s 
+                WHERE `fee_id`=%s
+            """
+            iud(qry, (pid, payment_time, due_id))
+
+        # Handle office fees without installments
+        elif fee_entry['installment_amount'] == 0:  # For office fees without installments
+            if remaining_amount == 0:
+                # Full payment: update status to "Paid"
+                qry = """
+                    UPDATE `office_fees` 
+                    SET `status`='Paid', `payment_id`=%s, `payment_time`=%s 
+                    WHERE `fee_id`=%s
+                """
+                iud(qry, (pid, payment_time, due_id))
+            else:
+                # Partial payment (if allowed): update remaining balance and keep status as "Unpaid"
+                qry = """
+                    UPDATE `office_fees` 
+                    SET `amount`=%s, `status`='Unpaid', `payment_id`=%s, `payment_time`=%s 
+                    WHERE `fee_id`=%s
+                """
+                iud(qry, (remaining_amount, pid, payment_time, due_id))
+
     elif fee_type == 'Library':
-        qry = "UPDATE `library_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+        qry = "UPDATE `library_fees` SET `status`='Paid', `payment_id`=%s, `payment_time`=%s WHERE `fee_id`=%s"
+        iud(qry, (pid, payment_time, due_id))
     elif fee_type == 'Department':
-        qry = "UPDATE `department_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+        qry = "UPDATE `department_fees` SET `status`='Paid', `payment_id`=%s, `payment_time`=%s WHERE `fee_id`=%s"
+        iud(qry, (pid, payment_time, due_id))
     elif fee_type == 'Hostel':
-        qry = "UPDATE `hostel_fees` SET `status`='Paid', `payment_id`=%s WHERE `fee_id`=%s"
+        qry = "UPDATE `hostel_fees` SET `status`='Paid', `payment_id`=%s, `payment_time`=%s WHERE `fee_id`=%s"
+        iud(qry, (pid, payment_time, due_id))
     else:
         return '''<script>alert("Invalid Fee Type!",fee_type);window.location="student_home"</script>'''
 
-    # Execute the update query
-    iud(qry, (pid, due_id))
-
-
     return '''<script>alert("Payment successful!");window.location="student_home"</script>'''
-	
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0",port=5000,debug=True)
