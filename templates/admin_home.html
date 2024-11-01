@@ -210,6 +210,7 @@
                         <th>Description</th>
                         <th>Amount</th>
                         <th>Due Date</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -303,6 +304,7 @@ function fetchAllFees() {
                             <td>${fee.description}</td>
                             <td>${fee.amount}</td>
                             <td>${fee.due_date}</td>
+                            <td>${fee.status}</td>
                         `;
                         tableBody.appendChild(row);
                     });
